@@ -31,12 +31,26 @@ class Consumer:
             raw = message.value
             self.handel(raw)
 
-    def handel(self, raw):
+     def _handle(self, raw: dict) -> None:
+        """Parse, validate and process a single intel message."""
         try:
             signal = IntelSignal(**raw)
-        except ValidationError as e:
-            log_event("ERROR", "valid filed", {"error": str(e)})
-             self.send_to_dlq(raw, reason: str(e))
+        except (ValidationError, KeyError, TypeError) as e:
+            log_event("ERROR", "Validation failed - routing to DLQ", {
+                "error": str(e),
+                "entity_id": raw.get("entity_id"),
+            })
+            self._send_to_dlq(raw, reason=str(e))
+            return
+ 
+        try:
+            self._service.process(signal)
+        except Exception as e:
+            log_event("ERROR", "valid filed", {
+                "signal_id": raw.get("signal_id"),
+                "error": str(e),
+            })
+            self._send_to_dlq(raw, reason=str(e))
 
 
     def send_to_dlq(self, raw, reason):
